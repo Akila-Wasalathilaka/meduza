@@ -64,3 +64,6 @@ obj/
 
 # Cache directories
 .cache/
+keystore/
+.kotlin/
+release_assets/
