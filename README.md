@@ -47,7 +47,7 @@ Meduza - Open source Android YouTube Music player. Free Spotify alternative with
     <tr>
       <td align="center"><b>Home & Recommendations</b></td>
       <td align="center"><b>Live UI Demo</b></td>
-      <td align="center"><b>Immersive Player</b></td>
+      <td align="center"><b>Search Music</b></td>
     </tr>
     <tr>
       <td align="center">
