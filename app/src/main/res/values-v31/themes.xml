@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Meduza" parent="android:Theme.Material.NoActionBar">
+        <!-- Splash screen: only available on Android 12+ (API 31+) -->
+        <item name="android:windowSplashScreenBackground">#07080D</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/meduza</item>
+    </style>
+</resources>
