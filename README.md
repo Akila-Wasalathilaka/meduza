@@ -114,7 +114,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for a full data-flow diagram.
 
 ### Build
 ```bash
-git clone https://github.com/akyyra/meduza.git
+git clone https://github.com/Akila-Wasalathilaka/meduza.git
 cd meduza
 ./gradlew assembleDebug
 ```
@@ -137,6 +137,6 @@ Licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for more 
 
 <div align="center">
 
-**Made with ❤️ by Akyyra**
+**Made with ❤️ by Akila-Wasalathilaka**
 
 </div>
