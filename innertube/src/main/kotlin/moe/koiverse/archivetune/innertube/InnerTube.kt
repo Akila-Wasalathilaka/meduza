@@ -149,6 +149,8 @@ class InnerTube {
 
         engine {
             config {
+                val tmpDir = System.getProperty("java.io.tmpdir") ?: "/tmp"
+                cache(okhttp3.Cache(java.io.File(tmpDir, "innertube_api_cache"), 50L * 1024L * 1024L))
                 dns(this@InnerTube.dns)
                 val sel = this@InnerTube.proxySelector
                 if (sel != null) {

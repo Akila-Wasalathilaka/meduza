@@ -17,11 +17,13 @@ import moe.koiverse.archivetune.innertube.models.Artist
 import moe.koiverse.archivetune.innertube.models.ArtistItem
 import moe.koiverse.archivetune.innertube.models.BrowseEndpoint
 import moe.koiverse.archivetune.innertube.models.MusicCarouselShelfRenderer
+import moe.koiverse.archivetune.innertube.models.MusicShelfRenderer
 import moe.koiverse.archivetune.innertube.models.MusicTwoRowItemRenderer
 import moe.koiverse.archivetune.innertube.models.PlaylistItem
 import moe.koiverse.archivetune.innertube.models.SectionListRenderer
 import moe.koiverse.archivetune.innertube.models.SongItem
 import moe.koiverse.archivetune.innertube.models.YTItem
+import moe.koiverse.archivetune.innertube.models.getItems
 import moe.koiverse.archivetune.innertube.models.oddElements
 import moe.koiverse.archivetune.innertube.models.filterExplicit
 
@@ -54,16 +56,28 @@ data class HomePage(
         val items: List<YTItem>,
     ) {
         companion object {
+            fun fromMusicShelfRenderer(renderer: MusicShelfRenderer): Section? {
+                val title = renderer.title?.runs?.firstOrNull()?.text ?: return null
+                val items = renderer.contents?.getItems()?.mapNotNull { SearchPage.toYTItem(it) } ?: return null
+                if (items.isEmpty()) return null
+                return Section(
+                    title = title,
+                    label = null,
+                    thumbnail = null,
+                    endpoint = renderer.moreContentButton?.buttonRenderer?.navigationEndpoint?.browseEndpoint ?: renderer.bottomEndpoint?.browseEndpoint,
+                    items = items
+                )
+            }
+
             fun fromMusicCarouselShelfRenderer(renderer: MusicCarouselShelfRenderer): Section? {
                 return Section(
                     title = renderer.header?.musicCarouselShelfBasicHeaderRenderer?.title?.runs?.firstOrNull()?.text ?: return null,
                     label = renderer.header.musicCarouselShelfBasicHeaderRenderer.strapline?.runs?.firstOrNull()?.text,
                     thumbnail = renderer.header.musicCarouselShelfBasicHeaderRenderer.thumbnail?.musicThumbnailRenderer?.getThumbnailUrl(),
                     endpoint = renderer.header.musicCarouselShelfBasicHeaderRenderer.moreContentButton?.buttonRenderer?.navigationEndpoint?.browseEndpoint,
-                    items = renderer.contents.mapNotNull {
-                        it.musicTwoRowItemRenderer
-                    }.mapNotNull {
-                        fromMusicTwoRowItemRenderer(it)
+                    items = renderer.contents.mapNotNull { content ->
+                        content.musicTwoRowItemRenderer?.let { fromMusicTwoRowItemRenderer(it) }
+                            ?: content.musicResponsiveListItemRenderer?.let { SearchPage.toYTItem(it) }
                     }.ifEmpty {
                         return null
                     }

@@ -2,6 +2,7 @@ package com.example.meduza.ui
 
 import android.Manifest
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -77,6 +78,7 @@ fun MeduzaApp(
     
     var detailItem       by remember { mutableStateOf<OnlineSong?>(null) }
     val detailSections   by mainViewModel.detailSections.collectAsState()
+    val playlistDetail   by mainViewModel.playlistDetail.collectAsState()
     val detailLoading    by mainViewModel.detailLoading.collectAsState()
 
     val isKeyboardOpen = WindowInsets.ime.asPaddingValues().calculateBottomPadding() > 0.dp
@@ -138,6 +140,15 @@ fun MeduzaApp(
         }
     }
 
+    BackHandler(enabled = isSettingsOpen || isPlayerExpanded || detailItem != null || selectedSection != 0) {
+        when {
+            isSettingsOpen       -> isSettingsOpen = false
+            isPlayerExpanded     -> isPlayerExpanded = false
+            detailItem != null   -> { detailItem = null; mainViewModel.clearDetails() }
+            selectedSection != 0 -> selectedSection = 0
+        }
+    }
+
     MeduzaBackground {
         Scaffold(containerColor = Color.Transparent) { _ ->
             Box(modifier = Modifier.fillMaxSize()) {
@@ -145,26 +156,61 @@ fun MeduzaApp(
                     when (selectedSection) {
                         0 -> {
                             if (detailItem != null) {
-                                com.example.meduza.ui.screens.home.ContextScreen(
-                                    title         = detailItem!!.title,
-                                    sections      = detailSections,
-                                    isLoading     = detailLoading,
-                                    playbackState = playbackState,
-                                    onBack        = { detailItem = null },
-                                    onPlaySong    = { song, allSongs, idx ->
-                                         if (playbackState.mediaId == song.videoId) {
-                                             playbackViewModel.togglePlayPause()
-                                         } else {
-                                             val items = allSongs.map { it.toMediaItem() }
-                                             playbackViewModel.playItems(
-                                                 items       = items,
-                                                 startIndex  = idx,
-                                                 contextName = detailItem?.title ?: "Playlist",
-                                             )
-                                             saveRecentlyPlayed(context, song)
+                                if (detailItem?.type == "playlist") {
+                                    com.example.meduza.ui.screens.home.PlaylistDetailScreen(
+                                        title            = detailItem!!.title,
+                                        playlistDetail   = playlistDetail,
+                                        fallbackSections = detailSections,
+                                        isLoading        = detailLoading,
+                                        playbackState    = playbackState,
+                                        onBack           = { detailItem = null; mainViewModel.clearDetails() },
+                                        onPlaySong       = { song, allSongs, idx ->
+                                            if (playbackState.mediaId == song.videoId) {
+                                                playbackViewModel.togglePlayPause()
+                                            } else {
+                                                val items = allSongs.map { it.toMediaItem() }
+                                                playbackViewModel.playItems(
+                                                    items       = items,
+                                                    startIndex  = idx,
+                                                    contextName = detailItem?.title ?: "Playlist",
+                                                )
+                                                saveRecentlyPlayed(context, song)
+                                            }
+                                        },
+                                        onPlayAll        = { allSongs, shuffle ->
+                                            if (allSongs.isNotEmpty()) {
+                                                val items = if (shuffle) allSongs.shuffled().map { it.toMediaItem() } else allSongs.map { it.toMediaItem() }
+                                                playbackViewModel.playItems(
+                                                    items       = items,
+                                                    startIndex  = 0,
+                                                    contextName = detailItem?.title ?: "Playlist",
+                                                )
+                                                saveRecentlyPlayed(context, allSongs.first())
+                                            }
+                                        }
+                                    )
+                                } else {
+                                    com.example.meduza.ui.screens.home.ContextScreen(
+                                        title         = detailItem!!.title,
+                                        sections      = detailSections,
+                                        isLoading     = detailLoading,
+                                        playbackState = playbackState,
+                                        onBack        = { detailItem = null; mainViewModel.clearDetails() },
+                                        onPlaySong    = { song, allSongs, idx ->
+                                             if (playbackState.mediaId == song.videoId) {
+                                                 playbackViewModel.togglePlayPause()
+                                             } else {
+                                                 val items = allSongs.map { it.toMediaItem() }
+                                                 playbackViewModel.playItems(
+                                                     items       = items,
+                                                     startIndex  = idx,
+                                                     contextName = detailItem?.title ?: "Context",
+                                                 )
+                                                 saveRecentlyPlayed(context, song)
+                                             }
                                          }
-                                     }
-                                )
+                                    )
+                                }
                             } else {
                                 HomeScreen(
                                     playbackState  = playbackState,
@@ -185,7 +231,11 @@ fun MeduzaApp(
                                             mainViewModel.loadArtistDetails(song.videoId)
                                         } else if (song.type == "playlist") {
                                             detailItem = song
-                                            mainViewModel.loadPlaylistDetails(song.videoId)
+                                            if (song.videoId.startsWith("MPREb_")) {
+                                                mainViewModel.loadAlbumDetails(song.videoId)
+                                            } else {
+                                                mainViewModel.loadPlaylistDetails(song.videoId)
+                                            }
                                         } else if (playbackState.mediaId == song.videoId) {
                                             playbackViewModel.togglePlayPause()
                                         } else {
@@ -212,11 +262,25 @@ fun MeduzaApp(
                             results       = onlineResults,
                             playbackState = playbackState,
                             onPlay        = { song ->
-                                playbackViewModel.playSongWithRadio(
-                                    song        = song.toMediaItem(),
-                                    contextName = "Search: $query",
-                                )
-                                saveRecentlyPlayed(context, song)
+                                if (song.type == "artist") {
+                                    selectedSection = 0
+                                    detailItem = song
+                                    mainViewModel.loadArtistDetails(song.videoId)
+                                } else if (song.type == "playlist") {
+                                    selectedSection = 0
+                                    detailItem = song
+                                    if (song.videoId.startsWith("MPREb_")) {
+                                        mainViewModel.loadAlbumDetails(song.videoId)
+                                    } else {
+                                        mainViewModel.loadPlaylistDetails(song.videoId)
+                                    }
+                                } else {
+                                    playbackViewModel.playSongWithRadio(
+                                        song        = song.toMediaItem(),
+                                        contextName = "Search: $query",
+                                    )
+                                    saveRecentlyPlayed(context, song)
+                                }
                             },
                             onCategorySelect = { q ->
                                 query = q
@@ -262,6 +326,13 @@ fun MeduzaApp(
 
                     if (!isPlayerExpanded && !isKeyboardOpen) {
                         MeduzaNavBar(selected = selectedSection) { idx ->
+                            if (selectedSection == idx && idx == 0) {
+                                detailItem = null
+                                mainViewModel.clearDetails()
+                            } else if (idx != 0) {
+                                detailItem = null
+                                mainViewModel.clearDetails()
+                            }
                             selectedSection  = idx
                             isPlayerExpanded = false
                         }

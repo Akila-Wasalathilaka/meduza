@@ -50,18 +50,46 @@ class OnlineMediaRepository private constructor() {
         if (query.isBlank()) return@withContext emptyList()
         ensureVisitorData()
         val result = runCatching {
-            YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrNull()
+            YouTube.searchSummary(query).getOrNull()
         }
-        result.getOrNull()?.items
-            ?.filterIsInstance<SongItem>()
-            ?.map { song ->
-                OnlineSong(
-                    videoId = song.id,
-                    title = song.title,
-                    artist = song.artists.firstOrNull()?.name ?: "Unknown artist",
-                    durationSeconds = song.duration,
-                    thumbnailUrl = song.thumbnail,
-                )
+        result.getOrNull()?.summaries?.flatMap { it.items }
+            ?.distinctBy { it.id }
+            ?.mapNotNull { item ->
+                when (item) {
+                    is moe.koiverse.archivetune.innertube.models.SongItem -> OnlineSong(
+                        videoId         = item.id,
+                        title           = item.title,
+                        artist          = item.artists.firstOrNull()?.name ?: "Unknown artist",
+                        durationSeconds = item.duration,
+                        thumbnailUrl    = item.thumbnail,
+                        type            = "song"
+                    )
+                    is moe.koiverse.archivetune.innertube.models.PlaylistItem -> OnlineSong(
+                        videoId         = item.id,
+                        title           = item.title,
+                        artist          = item.author?.name ?: "Playlist",
+                        durationSeconds = null,
+                        thumbnailUrl    = item.thumbnail,
+                        type            = "playlist"
+                    )
+                    is moe.koiverse.archivetune.innertube.models.ArtistItem -> OnlineSong(
+                        videoId         = item.id,
+                        title           = item.title,
+                        artist          = item.subscriberCountText ?: "Artist",
+                        durationSeconds = null,
+                        thumbnailUrl    = item.thumbnail,
+                        type            = "artist"
+                    )
+                    is moe.koiverse.archivetune.innertube.models.AlbumItem -> OnlineSong(
+                        videoId         = item.playlistId,
+                        title           = item.title,
+                        artist          = item.artists?.firstOrNull()?.name ?: "Album",
+                        durationSeconds = null,
+                        thumbnailUrl    = item.thumbnail,
+                        type            = "playlist"
+                    )
+                    else -> null
+                }
             } ?: emptyList()
     }
 
@@ -276,7 +304,7 @@ class OnlineMediaRepository private constructor() {
             ?.map { HomeChip(title = it.title, params = it.endpoint?.params ?: "") }
             .orEmpty()
 
-        val sections = homePage.sections.map { section ->
+        val rawSections = homePage.sections.map { section ->
             val songs = section.items.mapNotNull { item ->
                 when (item) {
                     is moe.koiverse.archivetune.innertube.models.SongItem -> OnlineSong(
@@ -316,6 +344,15 @@ class OnlineMediaRepository private constructor() {
             }
             HomeSection(title = section.title ?: "Recommended", songs = songs)
         }.filter { it.songs.isNotEmpty() }
+
+        val (songSections, otherSections) = rawSections.partition { sec ->
+            sec.title.contains("quick picks", ignoreCase = true) ||
+            sec.title.contains("start radio", ignoreCase = true) ||
+            sec.title.contains("forgotten favorites", ignoreCase = true) ||
+            sec.title.contains("listen again", ignoreCase = true) ||
+            (sec.songs.isNotEmpty() && sec.songs.all { it.type == "song" })
+        }
+        val sections = songSections + otherSections
 
         HomePageResult(
             sections     = sections,
@@ -489,6 +526,66 @@ class OnlineMediaRepository private constructor() {
             listOf(HomeSection(title = playlistPage.playlist.title, songs = songs))
         } else {
             emptyList()
+        }
+    }
+
+    suspend fun getPlaylistDetails(playlistId: String): com.example.meduza.data.model.PlaylistDetail? = withContext(Dispatchers.IO) {
+        val cleanId = playlistId.removePrefix("VL")
+        val result = YouTube.playlist(cleanId)
+        val page = result.getOrNull() ?: return@withContext null
+        val songs = page.songs.map { song ->
+            OnlineSong(
+                videoId         = song.id,
+                title           = song.title,
+                artist          = song.artists.firstOrNull()?.name ?: "Unknown artist",
+                durationSeconds = song.duration,
+                thumbnailUrl    = song.thumbnail,
+                type            = "song"
+            )
+        }
+        com.example.meduza.data.model.PlaylistDetail(
+            id              = page.playlist.id,
+            title           = page.playlist.title,
+            description     = page.playlist.description,
+            authorName      = page.playlist.author?.name ?: "Playlist",
+            authorAvatarUrl = null,
+            thumbnailUrl    = page.playlist.thumbnail,
+            trackCountText  = page.playlist.songCountText ?: "${songs.size} songs",
+            totalDurationText = null,
+            isEditable      = page.playlist.isEditable,
+            tracks          = songs
+        )
+    }
+
+    suspend fun getAlbumDetails(browseIdOrPlaylistId: String): com.example.meduza.data.model.PlaylistDetail? = withContext(Dispatchers.IO) {
+        val cleanId = browseIdOrPlaylistId.removePrefix("VL")
+        if (cleanId.startsWith("MPREb_")) {
+            val result = YouTube.album(cleanId)
+            val page = result.getOrNull() ?: return@withContext null
+            val songs = page.songs.map { song ->
+                OnlineSong(
+                    videoId         = song.id,
+                    title           = song.title,
+                    artist          = song.artists.firstOrNull()?.name ?: page.album.artists?.firstOrNull()?.name ?: "Unknown artist",
+                    durationSeconds = song.duration,
+                    thumbnailUrl    = song.thumbnail ?: page.album.thumbnail,
+                    type            = "song"
+                )
+            }
+            com.example.meduza.data.model.PlaylistDetail(
+                id              = page.album.playlistId,
+                title           = page.album.title,
+                description     = "${page.album.year ?: ""} • ${page.album.artists?.joinToString { it.name } ?: "Album"}",
+                authorName      = page.album.artists?.firstOrNull()?.name ?: "Album",
+                authorAvatarUrl = null,
+                thumbnailUrl    = page.album.thumbnail,
+                trackCountText  = "${songs.size} songs",
+                totalDurationText = null,
+                isEditable      = false,
+                tracks          = songs
+            )
+        } else {
+            getPlaylistDetails(cleanId)
         }
     }
 }

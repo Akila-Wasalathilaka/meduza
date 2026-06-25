@@ -25,7 +25,8 @@ object DownloadCache {
     fun getCache(context: Context): SimpleCache {
         if (cache == null) {
             val cacheDir = File(context.cacheDir, "media_playback_cache")
-            val evictor = LeastRecentlyUsedCacheEvictor(100 * 1024 * 1024) // 100MB Cache Limit
+            val limit = com.example.meduza.core.utils.DevicePerformanceManager.getAdaptiveCacheLimit(context)
+            val evictor = LeastRecentlyUsedCacheEvictor(limit)
             val databaseProvider = StandaloneDatabaseProvider(context)
             cache = SimpleCache(cacheDir, evictor, databaseProvider)
         }
@@ -122,11 +123,12 @@ class MeduzaPlaybackService : MediaSessionService() {
         val mediaSourceFactory = DefaultMediaSourceFactory(this)
             .setDataSourceFactory(resolvingDataSourceFactory)
 
-        // Faster buffer start: begin playback after 500ms buffer, recover after 1s re-buffer
+        val isLowEnd = com.example.meduza.core.utils.DevicePerformanceManager.isLowEndDevice(this)
+        val maxBuffer = if (isLowEnd) 15_000 else 50_000
         val loadControl = androidx.media3.exoplayer.DefaultLoadControl.Builder()
             .setBufferDurationsMs(
                 /* minBufferMs               */ 1_500,
-                /* maxBufferMs               */ 50_000,
+                /* maxBufferMs               */ maxBuffer,
                 /* bufferForPlaybackMs       */ 500,
                 /* bufferForPlaybackAfterRebufferMs */ 1_000,
             )

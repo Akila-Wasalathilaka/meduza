@@ -64,6 +64,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _detailSections = MutableStateFlow<List<HomeSection>>(emptyList())
     val detailSections: StateFlow<List<HomeSection>> = _detailSections.asStateFlow()
 
+    private val _playlistDetail = MutableStateFlow<com.example.meduza.data.model.PlaylistDetail?>(null)
+    val playlistDetail: StateFlow<com.example.meduza.data.model.PlaylistDetail?> = _playlistDetail.asStateFlow()
+
     private val _detailLoading = MutableStateFlow(false)
     val detailLoading: StateFlow<Boolean> = _detailLoading.asStateFlow()
 
@@ -71,6 +74,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _detailLoading.value = true
             _detailSections.value = emptyList()
+            _playlistDetail.value = null
             try {
                 _detailSections.value = onlineRepository.getArtistData(browseId)
             } finally {
@@ -83,8 +87,30 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             _detailLoading.value = true
             _detailSections.value = emptyList()
+            _playlistDetail.value = null
             try {
-                _detailSections.value = onlineRepository.getPlaylistData(playlistId)
+                val detail = onlineRepository.getPlaylistDetails(playlistId)
+                _playlistDetail.value = detail
+                if (detail != null && detail.tracks.isNotEmpty()) {
+                    _detailSections.value = listOf(HomeSection(title = detail.title, songs = detail.tracks))
+                }
+            } finally {
+                _detailLoading.value = false
+            }
+        }
+    }
+
+    fun loadAlbumDetails(browseIdOrPlaylistId: String) {
+        viewModelScope.launch {
+            _detailLoading.value = true
+            _detailSections.value = emptyList()
+            _playlistDetail.value = null
+            try {
+                val detail = onlineRepository.getAlbumDetails(browseIdOrPlaylistId)
+                _playlistDetail.value = detail
+                if (detail != null && detail.tracks.isNotEmpty()) {
+                    _detailSections.value = listOf(HomeSection(title = detail.title, songs = detail.tracks))
+                }
             } finally {
                 _detailLoading.value = false
             }
@@ -93,6 +119,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearDetails() {
         _detailSections.value = emptyList()
+        _playlistDetail.value = null
     }
 
     // ── Favourite video IDs (used by loadHomeData for personalized mixes) ──────
@@ -114,7 +141,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val cache = _homeSections.value
         val lastLoad = settingsManager.lastHomeRequestTime
         val now = System.currentTimeMillis()
-        if (cache.isNotEmpty() && (now - lastLoad) < 10 * 60 * 1000L) {
+        val hasSongSection = cache.any { it.songs.firstOrNull()?.type == "song" }
+        if (cache.isNotEmpty() && hasSongSection && (now - lastLoad) < 5 * 60 * 1000L) {
             _homeChips.value = jsonToChips(settingsManager.cachedHomeChips)
             return
         }
@@ -155,6 +183,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
             _homeLoading.value = false
+            
+            // Aggressive Pre-Fetching: instantly pre-load next rows like Spotify to ensure 10+ rows
+            if (networkSections.isNotEmpty() && _homeContinuation.value != null) {
+                loadMoreHomeSections()
+            }
         }
     }
 
@@ -200,6 +233,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             }
             _homeLoading.value = false
             _homeRefreshing.value = false
+            
+            // Aggressive Pre-Fetching: instantly pre-load next rows like Spotify to ensure 10+ rows
+            if (networkSections.isNotEmpty() && _homeContinuation.value != null) {
+                loadMoreHomeSections()
+            }
         }
     }
 
@@ -218,6 +256,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
             if (result.sections.isNotEmpty()) {
                 _homeSections.value = _homeSections.value + result.sections
+                settingsManager.cachedHomeSections = sectionsToJson(_homeSections.value)
             }
             _homeContinuation.value = result.continuation
             _isLoadingMore.value = false

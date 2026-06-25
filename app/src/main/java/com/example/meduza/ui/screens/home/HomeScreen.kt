@@ -48,8 +48,12 @@ import kotlinx.coroutines.flow.filter
 import java.util.Calendar
 
 // ── Section title truncation ───────────────────────────────────────────────────
-private fun truncateTitle(title: String, maxLength: Int = 30): String =
-    if (title.length > maxLength) title.take(maxLength - 1) + "…" else title
+private fun truncateTitle(title: String, maxLength: Int = 35): String {
+    if (title.length <= maxLength) return title
+    val trimmed = title.take(maxLength)
+    val lastSpace = trimmed.lastIndexOf(' ')
+    return if (lastSpace > 15) trimmed.substring(0, lastSpace) + "…" else trimmed + "…"
+}
 
 // ── HomeScreen ────────────────────────────────────────────────────────────────
 @Composable
@@ -125,7 +129,7 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         contentPadding        = PaddingValues(horizontal = 16.dp),
                     ) {
-                        itemsIndexed(displayRecent.take(10)) { idx, song ->
+                        itemsIndexed(displayRecent.take(10), key = { idx, song -> "recent_${song.videoId}_$idx" }) { idx, song ->
                             val isActive = playbackState.mediaId == song.videoId
                             ImmersiveTrackCard(
                                 song      = song,
@@ -146,12 +150,10 @@ fun HomeScreen(
                     Spacer(Modifier.height(10.dp))
                 }
                 item(key = "content_$sIdx") {
-                    // Varied, dynamic grid aesthetic
-                    when (sIdx % 4) {
-                        0 -> StandardRow(section.songs, playbackState, onPlaySong, 200.dp) // Large premium
-                        1 -> CompactRow(section.songs, playbackState, onPlaySong, 130.dp)  // Small tight
-                        2 -> ListColumnsRow(section.songs, playbackState, onPlaySong)      // Multi-row list
-                        3 -> StandardRow(section.songs, playbackState, onPlaySong, 160.dp) // Standard
+                    if (sIdx % 3 == 2) {
+                        DeckRow(section.songs, playbackState, onPlaySong)
+                    } else {
+                        StandardRow(section.songs, playbackState, onPlaySong, 170.dp)
                     }
                     Spacer(Modifier.height(32.dp))
                 }
@@ -225,22 +227,35 @@ private fun HomeHeader(greeting: String, onSettingsClick: () -> Unit) {
 @Composable
 fun HomeSectionHeader(title: String, label: String? = null) {
     val mc = LocalMeduzaColors.current
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-        Text(
-            text       = title,
-            fontSize   = 18.sp,
-            fontWeight = FontWeight.Bold,
-            color      = mc.textPrimary,
-            maxLines   = 1,
-            overflow   = TextOverflow.Ellipsis,
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .width(4.dp)
+                .height(20.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(mc.accent)
         )
-        if (label != null) {
+        Spacer(Modifier.width(10.dp))
+        Column {
             Text(
-                text     = label,
-                fontSize = 12.sp,
-                color    = mc.textSecondary,
-                maxLines = 1,
+                text       = title,
+                fontSize   = 19.sp,
+                fontWeight = FontWeight.Black,
+                color      = mc.textPrimary,
+                maxLines   = 1,
+                overflow   = TextOverflow.Ellipsis,
             )
+            if (label != null) {
+                Text(
+                    text     = label,
+                    fontSize = 12.sp,
+                    color    = mc.textSecondary,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -256,7 +271,7 @@ private fun DeckRow(
         horizontalArrangement = Arrangement.spacedBy((-28).dp),
         contentPadding        = PaddingValues(start = 16.dp, top = 0.dp, end = 40.dp, bottom = 0.dp),
     ) {
-        itemsIndexed(songs) { idx, song ->
+        itemsIndexed(songs, key = { idx, song -> "deck_${song.videoId}_$idx" }) { idx, song ->
             Box(
                 modifier = Modifier
                     .graphicsLayer {
@@ -288,7 +303,7 @@ private fun StandardRow(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding        = PaddingValues(horizontal = 16.dp),
     ) {
-        itemsIndexed(songs) { idx, song ->
+        itemsIndexed(songs, key = { idx, song -> "std_${song.videoId}_$idx" }) { idx, song ->
             ImmersiveTrackCard(
                 song      = song,
                 isPlaying = state.mediaId == song.videoId,
@@ -311,7 +326,7 @@ private fun ListColumnsRow(
         contentPadding        = PaddingValues(horizontal = 16.dp),
     ) {
         val chunks = songs.chunked(4)
-        items(chunks.size) { chunkIdx ->
+        items(chunks.size, key = { chunkIdx -> "col_$chunkIdx" }) { chunkIdx ->
             val chunk = chunks[chunkIdx]
             Column(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -345,7 +360,7 @@ private fun CompactRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         contentPadding        = PaddingValues(horizontal = 16.dp),
     ) {
-        itemsIndexed(songs) { idx, song ->
+        itemsIndexed(songs, key = { idx, song -> "cmp_${song.videoId}_$idx" }) { idx, song ->
             ImmersiveTrackCard(
                 song      = song,
                 isPlaying = state.mediaId == song.videoId,
@@ -374,9 +389,11 @@ fun ImmersiveTrackCard(
     val isArtist = song.type == "artist"
     val shape   = if (isArtist) CircleShape else RoundedCornerShape(12.dp)
 
-    val urls    = remember(videoId, song.thumbnailUrl) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isLowEnd = remember(context) { com.example.meduza.core.utils.DevicePerformanceManager.isLowEndDevice(context) }
+    val urls    = remember(videoId, song.thumbnailUrl, isLowEnd) {
         listOfNotNull(
-            song.thumbnailUrl?.replace(Regex("=w\\d+-h\\d+.*"), "=w540-h540-l90-rj"),
+            com.example.meduza.core.utils.DevicePerformanceManager.getAdaptiveThumbnailUrl(song.thumbnailUrl, isLowEnd),
             song.thumbnailUrl,
             "https://i.ytimg.com/vi/$videoId/maxresdefault.jpg",
             "https://i.ytimg.com/vi/$videoId/hqdefault.jpg",
@@ -477,6 +494,64 @@ fun ImmersiveTrackCard(
                 textAlign  = androidx.compose.ui.text.style.TextAlign.Start,
                 modifier   = Modifier.fillMaxWidth()
             )
+        }
+    }
+}
+
+@Composable
+private fun QuickPicksGrid(
+    songs: List<OnlineSong>,
+    state: PlaybackUiState,
+    onPlay: (OnlineSong, List<OnlineSong>, Int) -> Unit,
+) {
+    val mc = LocalMeduzaColors.current
+    val displaySongs = songs.take(8)
+    val chunks = displaySongs.chunked(2)
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        chunks.forEachIndexed { rowIdx, rowSongs ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowSongs.forEachIndexed { colIdx, song ->
+                    val itemIdx = rowIdx * 2 + colIdx
+                    val isPlaying = state.mediaId == song.videoId
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(56.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(if (isPlaying) mc.accent.copy(alpha = 0.25f) else mc.surface.copy(alpha = 0.6f))
+                            .border(0.5.dp, if (isPlaying) mc.accent else mc.border, RoundedCornerShape(8.dp))
+                            .clickable { onPlay(song, songs, itemIdx) }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            coil.compose.AsyncImage(
+                                model = song.thumbnailUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = song.title,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isPlaying) mc.accent else mc.textPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f).padding(end = 8.dp)
+                            )
+                        }
+                    }
+                }
+                if (rowSongs.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
         }
     }
 }

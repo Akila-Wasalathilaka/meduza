@@ -67,3 +67,5 @@ obj/
 keystore/
 .kotlin/
 release_assets/
+*.hprof
+
