@@ -2,7 +2,7 @@
   <img src="assets/logo.png" alt="Meduza Android YouTube Music Player Logo" width="250"/>
   <h1>Meduza 🎵</h1>
   <p><strong>Open Source Android YouTube Music Player | Free Spotify Alternative</strong></p>
-  <p><em>Gapless playback, smart recommendations, ExoPlayer Media3 | Made with ❤️ by Akyyra</em></p>
+  <p><em>Gapless playback, smart recommendations, ExoPlayer Media3 | Made with ❤️ by AW</em></p>
   <a href="https://github.com/realakyyra/meduza/releases/latest/download/meduza-v1.0.0.apk"><img src="https://img.shields.io/badge/Download_APK-v1.0.0-07080D?style=for-the-badge&logo=android&logoColor=white" alt="Download APK" height="42"></a>
   <a href="https://ko-fi.com/akyyra"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="ko-fi" height="42"></a>
 </div>
@@ -137,6 +137,6 @@ Licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for more 
 
 <div align="center">
 
-**Made with ❤️ by Akila-Wasalathilaka**
+**Made with ❤️ by AW**
 
 </div>
